@@ -1,0 +1,279 @@
+#include <fstream>
+#include <sstream>
+#include <iostream>
+#include <vector>
+#include <string>
+#include <algorithm>
+#include <cctype> // For std::tolower
+
+// Define Product structure
+struct Product {
+    std::string productID;
+    std::string name;
+    std::string category;
+    double price;
+    int stockQuantity;
+
+    Product(const std::string& id, const std::string& n, const std::string& c, double p, int s)
+        : productID(id), name(n), category(c), price(p), stockQuantity(s) {}
+};
+
+// Function prototypes
+void loadProductsFromFile(const std::string& filename, std::vector<Product>& products);
+std::vector<Product> searchByID(const std::vector<Product>& products, const std::string& id);
+std::vector<Product> searchByName(const std::vector<Product>& products, const std::string& name);
+std::vector<Product> filterByCategory(const std::vector<Product>& products, const std::string& category);
+std::vector<Product> filterByPriceRange(const std::vector<Product>& products, double minPrice, double maxPrice);
+std::vector<Product> filterByStock(const std::vector<Product>& products, bool inStock);
+void sortProducts(std::vector<Product>& products, int option);
+void displayProducts(const std::vector<Product>& products);
+std::string toLower(const std::string& str);
+
+int main() {
+    std::vector<Product> products;
+
+    // Load products from file
+    loadProductsFromFile("products.txt", products);
+
+    if (products.empty()) {
+        std::cout << "No products loaded. Exiting program.\n";
+        return 1;
+    }
+
+    int choice;
+    while (true) {
+        std::cout << "\nMenu Options:\n";
+        std::cout << "1. Search by Product ID\n";
+        std::cout << "2. Search by Product Name\n";
+        std::cout << "3. Filter by Product Category\n";
+        std::cout << "4. Filter by Price Range\n";
+        std::cout << "5. Filter by Stock Availability\n";
+        std::cout << "6. Sort Products\n";
+        std::cout << "7. Exit\n";
+        std::cout << "Enter your choice: ";
+        if (!(std::cin >> choice)) {
+            std::cout << "Invalid input. Please enter a number.\n";
+            std::cin.clear();
+            std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+            continue;
+        }
+        std::cin.ignore(); // Clear input buffer
+
+        if (choice == 7) break;
+
+        switch (choice) {
+            case 1: { // Search by Product ID
+                std::string productID;
+                std::cout << "Enter product ID to search: ";
+                std::getline(std::cin, productID);
+
+                std::vector<Product> results = searchByID(products, productID);
+                std::cout << "\nSearch Results:\n";
+                displayProducts(results);
+                break;
+            }
+            case 2: { // Search by Product Name
+                std::string productName;
+                std::cout << "Enter product name to search: ";
+                std::getline(std::cin, productName);
+
+                std::vector<Product> results = searchByName(products, productName);
+                std::cout << "\nSearch Results:\n";
+                displayProducts(results);
+                break;
+            }
+            case 3: { // Filter by Category
+                std::string category;
+                std::cout << "Enter category to filter by: ";
+                std::getline(std::cin, category);
+
+                std::vector<Product> results = filterByCategory(products, category);
+                std::cout << "\nProducts in Category '" << category << "':\n";
+                displayProducts(results);
+                break;
+            }
+            case 4: { // Filter by Price Range
+                double minPrice, maxPrice;
+                std::cout << "Enter minimum price: ";
+                while (!(std::cin >> minPrice)) {
+                    std::cout << "Invalid input. Enter a numeric value: ";
+                    std::cin.clear();
+                    std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+                }
+                std::cout << "Enter maximum price: ";
+                while (!(std::cin >> maxPrice)) {
+                    std::cout << "Invalid input. Enter a numeric value: ";
+                    std::cin.clear();
+                    std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+                }
+                std::cin.ignore(); // Clear input buffer
+
+                std::vector<Product> results = filterByPriceRange(products, minPrice, maxPrice);
+                std::cout << "\nProducts in Price Range [" << minPrice << ", " << maxPrice << "]:\n";
+                displayProducts(results);
+                break;
+            }
+            case 5: { // Filter by Stock
+                int stockChoice;
+                std::cout << "Filter by stock availability:\n1. In Stock\n2. Out of Stock\nEnter your choice: ";
+                while (!(std::cin >> stockChoice) || (stockChoice != 1 && stockChoice != 2)) {
+                    std::cout << "Invalid input. Please enter 1 or 2: ";
+                    std::cin.clear();
+                    std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+                }
+                std::cin.ignore(); // Clear input buffer
+
+                bool inStock = (stockChoice == 1);
+                std::vector<Product> results = filterByStock(products, inStock);
+                std::cout << "\nProducts " << (inStock ? "in stock" : "out of stock") << ":\n";
+                displayProducts(results);
+                break;
+            }
+            case 6: { // Sort Products
+                int sortOption;
+                std::cout << "Sort by:\n1. Name\n2. Price\n3. Stock Quantity\nEnter your choice: ";
+                while (!(std::cin >> sortOption) || sortOption < 1 || sortOption > 3) {
+                    std::cout << "Invalid input. Please enter 1, 2, or 3: ";
+                    std::cin.clear();
+                    std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+                }
+                std::cin.ignore(); // Clear input buffer
+
+                sortProducts(products, sortOption);
+                std::cout << "\nProducts sorted successfully.\n";
+                displayProducts(products);
+                break;
+            }
+            default:
+                std::cout << "Invalid choice. Please try again.\n";
+        }
+    }
+
+    return 0;
+}
+
+// Function implementations
+void loadProductsFromFile(const std::string& filename, std::vector<Product>& products) {
+    std::ifstream file(filename);
+    if (!file.is_open()) {
+        std::cerr << "Error: Could not open file " << filename << "\n";
+        return;
+    }
+
+    std::string line;
+    while (std::getline(file, line)) {
+        std::istringstream ss(line);
+        std::string productID, name, category;
+        double price;
+        int stockQuantity;
+
+        if (std::getline(ss, productID, ',') &&
+            std::getline(ss, name, ',') &&
+            std::getline(ss, category, ',') &&
+            ss >> price &&
+            ss.ignore() &&
+            ss >> stockQuantity) {
+            products.emplace_back(productID, name, category, price, stockQuantity);
+        } else {
+            std::cerr << "Error: Could not parse line: " << line << "\n";
+        }
+    }
+
+    file.close();
+}
+
+std::string toLower(const std::string& str) {
+    std::string result = str;
+    std::transform(result.begin(), result.end(), result.begin(), [](unsigned char c) { return std::tolower(c); });
+    return result;
+}
+
+std::vector<Product> searchByID(const std::vector<Product>& products, const std::string& id) {
+    std::string lowerID = toLower(id);
+    std::vector<Product> result;
+    for (const auto& product : products) {
+        if (toLower(product.productID).find(lowerID) != std::string::npos) {
+            result.push_back(product);
+        }
+    }
+    return result;
+}
+
+std::vector<Product> searchByName(const std::vector<Product>& products, const std::string& name) {
+    std::string lowerName = toLower(name);
+    std::vector<Product> result;
+    for (const auto& product : products) {
+        if (toLower(product.name).find(lowerName) != std::string::npos) {
+            result.push_back(product);
+        }
+    }
+    return result;
+}
+
+std::vector<Product> filterByCategory(const std::vector<Product>& products, const std::string& category) {
+    std::string lowerCategory = toLower(category);
+    std::vector<Product> result;
+    for (const auto& product : products) {
+        if (toLower(product.category) == lowerCategory) {
+            result.push_back(product);
+        }
+    }
+    return result;
+}
+
+std::vector<Product> filterByPriceRange(const std::vector<Product>& products, double minPrice, double maxPrice) {
+    std::vector<Product> result;
+    for (const auto& product : products) {
+        if (product.price >= minPrice && product.price <= maxPrice) {
+            result.push_back(product);
+        }
+    }
+    return result;
+}
+
+std::vector<Product> filterByStock(const std::vector<Product>& products, bool inStock) {
+    std::vector<Product> result;
+    for (const auto& product : products) {
+        if ((inStock && product.stockQuantity > 0) || (!inStock && product.stockQuantity == 0)) {
+            result.push_back(product);
+        }
+    }
+    return result;
+}
+
+void sortProducts(std::vector<Product>& products, int option) {
+    switch (option) {
+        case 1:
+            std::sort(products.begin(), products.end(), [](const Product& a, const Product& b) {
+                return toLower(a.name) < toLower(b.name);
+            });
+            break;
+        case 2:
+            std::sort(products.begin(), products.end(), [](const Product& a, const Product& b) {
+                return a.price < b.price;
+            });
+            break;
+        case 3:
+            std::sort(products.begin(), products.end(), [](const Product& a, const Product& b) {
+                return a.stockQuantity > b.stockQuantity;
+            });
+            break;
+        default:
+            std::cerr << "Invalid sort option.\n";
+            break;
+    }
+}
+
+void displayProducts(const std::vector<Product>& products) {
+    if (products.empty()) {
+        std::cout << "No products found matching the criteria.\n";
+        return;
+    }
+    for (const auto& product : products) {
+        std::cout << "Product ID: " << product.productID
+                  << ", Name: " << product.name
+                  << ", Category: " << product.category
+                  << ", Price: $" << product.price
+                  << ", Stock: " << product.stockQuantity << '\n';
+    }
+}
